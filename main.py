@@ -65,6 +65,34 @@ def empty_function():
     print("Test function triggered")
 
 
+def clear_data():
+    """Clear table contents and delete all JPG files in the converted_jpgs folder."""
+    # Czyszczenie tabeli
+    for row in tree.get_children():
+        tree.delete(row)
+
+    # Usuwanie plików JPG z folderu
+    output_folder = "converted_jpgs"
+
+    try:
+        # Sprawdź, czy folder istnieje
+        if os.path.exists(output_folder):
+            # Przejrzyj pliki w folderze
+            for filename in os.listdir(output_folder):
+                # Sprawdź, czy plik ma rozszerzenie .jpg
+                if filename.lower().endswith(".jpg"):
+                    file_path = os.path.join(output_folder, filename)
+                    try:
+                        os.remove(file_path)  # Usuń plik JPG
+                        print(f"Deleted: {file_path}")
+                    except Exception as e:
+                        print(f"Error deleting file {file_path}: {e}")
+        else:
+            print(f"Folder {output_folder} does not exist.")
+    except Exception as e:
+        print(f"Error clearing data: {e}")
+
+
 # Główne okno GUI
 gui_main_window = tk.Tk()
 gui_main_window.title("DocsQualityCheck")
@@ -79,7 +107,7 @@ gui_main_window.config(menu=menu_bar)
 file_menu = Menu(menu_bar, tearoff=False)
 menu_bar.add_cascade(label="File", menu=file_menu)
 file_menu.add_command(label="Open", command=open_and_check_file_format)
-file_menu.add_command(label="Close", command=empty_function)
+file_menu.add_command(label="Close", command=clear_data)  # Zmieniono na clear_data
 
 # Menu tabeli
 table_menu = Menu(menu_bar, tearoff=0)
@@ -187,12 +215,21 @@ def show_image_preview(event):
         print(f"Error displaying image: {e}")
 
 
+def clear_image_preview():
+    """Clear the image preview displayed in the window."""
+    image_label.config(image=None)
+    image_label.image = None
+
+
 # Etykieta do wyświetlania obrazu
 image_label = Label(gui_main_window)
 image_label.pack(side="right", padx=20, pady=20)
 
 # Powiązanie kliknięcia w tabeli z funkcją wyświetlania obrazu
 tree.bind("<ButtonRelease-1>", show_image_preview)
+
+# Dodanie opcji czyszczenia obrazu po naciśnięciu klawisza
+gui_main_window.bind("<Escape>", lambda event: clear_image_preview())
 
 label_view = Label(gui_main_window)
 label_view.pack()

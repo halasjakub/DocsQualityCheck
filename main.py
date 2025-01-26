@@ -3,11 +3,16 @@ import pyautogui
 import tkinter as tk
 from tkinter import filedialog, Label, Menu, ttk
 from pdf2image import convert_from_path
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 
 # Lista do przechowywania nazw plików, które zostały przekonwertowane
 converted_files = []
 
+# Zmienna do przechowywania stanu rysowania
+is_drawing = False
+start_x, start_y = 0, 0
+rect_image = None
+draw = None
 
 def convert_pdf_to_jpg(pdf_file_path):
     """Converts a PDF file to JPG images and stores them in a specific folder."""
@@ -34,7 +39,6 @@ def convert_pdf_to_jpg(pdf_file_path):
     except Exception as e:
         print(f"Error converting PDF to JPG: {e}")
 
-
 def open_and_check_file_format():
     """Opens a file dialog to select multiple files and checks their format (DOCX, XLSX, PDF, TXT)."""
     file_paths = filedialog.askopenfilenames(
@@ -59,11 +63,9 @@ def open_and_check_file_format():
         else:
             print(f"Unsupported file format: {file_extension}")
 
-
 def empty_function():
     """Test function triggered."""
     print("Test function triggered")
-
 
 def clear_data():
     """Clear table contents and delete all JPG files in the converted_jpgs folder."""
@@ -92,12 +94,10 @@ def clear_data():
     except Exception as e:
         print(f"Error clearing data: {e}")
 
-
 # Główne okno GUI
 gui_main_window = tk.Tk()
 gui_main_window.title("DocsQualityCheck")
 gui_main_window.geometry(f"{pyautogui.size()[0]}x{pyautogui.size()[1]}")
-
 
 # Pasek menu
 menu_bar = Menu(gui_main_window)
@@ -113,7 +113,6 @@ file_menu.add_command(label="Close", command=clear_data)  # Zmieniono na clear_d
 table_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Table", menu=table_menu)
 
-
 def show_basic_table():
     """Display only the 'Documentnumber' column."""
     tree["columns"] = ("documentNumber",)
@@ -121,7 +120,6 @@ def show_basic_table():
         tree.column(column)
         tree.heading(column, text=column.replace("_", " ").title())
     update_document_number_column()
-
 
 def show_fdf_table():
     """Display 'Documentnumber', 'Study', 'Studysite', 'Investigatorname' columns."""
@@ -133,23 +131,8 @@ def show_fdf_table():
         tree.heading(column, text=column.replace("_", " ").title())
     update_document_number_column()
 
-
 table_menu.add_command(label="Basic", command=show_basic_table)
 table_menu.add_command(label="FDF", command=show_fdf_table)
-
-# Menu danych
-data_menu = Menu(menu_bar, tearoff=False)
-menu_bar.add_cascade(label="Data", menu=data_menu)
-data_menu.add_command(label="Import", command=empty_function)
-data_menu.add_command(label="Export", command=empty_function)
-
-# Menu pomocy
-help_menu = Menu(menu_bar, tearoff=0)
-menu_bar.add_cascade(label="Help", menu=help_menu)
-help_menu.add_command(label="About", command=empty_function)
-help_menu.add_command(label="Manual", command=empty_function)
-help_menu.add_command(label="What's New", command=empty_function)
-help_menu.add_command(label="Report", command=empty_function)
 
 # Tabela
 tree = ttk.Treeview(gui_main_window, selectmode="browse")
@@ -177,7 +160,6 @@ for column in columns:
     tree.column(column)
     tree.heading(column, text=column.replace("_", " ").title())
 
-
 def update_document_number_column():
     """Update the 'Documentnumber' column with the names of converted files."""
     # Czyszczenie istniejących danych w tabeli
@@ -188,7 +170,6 @@ def update_document_number_column():
     for file_name in converted_files:
         file_name_without_extension = os.path.splitext(file_name)[0]  # Usunięcie rozszerzenia
         tree.insert("", "end", values=(file_name_without_extension,))
-
 
 def show_image_preview(event):
     """Display image preview when a file is selected from the treeview."""
@@ -204,9 +185,13 @@ def show_image_preview(event):
 
     try:
         # Otworzenie obrazu
-        image = Image.open(image_path)
-        image.thumbnail((400, 400))  # Zmniejszenie obrazu do rozmiaru okna podglądu
-        image_tk = ImageTk.PhotoImage(image)
+        global rect_image, draw
+        rect_image = Image.open(image_path)
+        rect_image.thumbnail((400, 400))  # Zmniejszenie obrazu do rozmiaru okna podglądu
+        image_tk = ImageTk.PhotoImage(rect_image)
+
+        # Inicjalizacja rysowania
+        draw = ImageDraw.Draw(rect_image)
 
         # Wyświetlenie obrazu w oknie
         image_label.config(image=image_tk)
@@ -214,12 +199,50 @@ def show_image_preview(event):
     except Exception as e:
         print(f"Error displaying image: {e}")
 
-
 def clear_image_preview():
     """Clear the image preview displayed in the window."""
     image_label.config(image=None)
     image_label.image = None
 
+def start_drawing(event):
+    """Start drawing a rectangle."""
+    global is_drawing, start_x, start_y
+    if not rect_image:
+        return
+
+    is_drawing = True
+    start_x, start_y = event.x, event.y
+
+def draw_rectangle(event):
+    """Draw the rectangle on the image preview."""
+    global is_drawing, start_x, start_y, draw
+    if is_drawing and rect_image:
+        # Rysowanie prostokąta
+        temp_image = rect_image.copy()
+        temp_draw = ImageDraw.Draw(temp_image)
+        temp_draw.rectangle([start_x, start_y, event.x, event.y], outline="red", width=3)
+
+        # Przełącz obraz na tymczasowy
+        temp_image_tk = ImageTk.PhotoImage(temp_image)
+        image_label.config(image=temp_image_tk)
+        image_label.image = temp_image_tk
+
+def stop_drawing(event):
+    """Stop drawing the rectangle."""
+    global is_drawing, draw
+    if is_drawing:
+        is_drawing = False
+        # Narysuj ostateczny prostokąt
+        if rect_image:
+            draw.rectangle([start_x, start_y, event.x, event.y], outline="red", width=3)
+            image_tk = ImageTk.PhotoImage(rect_image)
+            image_label.config(image=image_tk)
+            image_label.image = image_tk
+
+def enable_drawing():
+    """Enable drawing mode."""
+    global is_drawing
+    is_drawing = True
 
 # Etykieta do wyświetlania obrazu
 image_label = Label(gui_main_window)
@@ -228,10 +251,13 @@ image_label.pack(side="right", padx=20, pady=20)
 # Powiązanie kliknięcia w tabeli z funkcją wyświetlania obrazu
 tree.bind("<ButtonRelease-1>", show_image_preview)
 
-# Dodanie opcji czyszczenia obrazu po naciśnięciu klawisza
-gui_main_window.bind("<Escape>", lambda event: clear_image_preview())
+# Przycisk do włączenia trybu rysowania
+draw_button = tk.Button(gui_main_window, text="Draw Rectangle", command=enable_drawing)
+draw_button.pack(side="bottom", pady=10)
 
-label_view = Label(gui_main_window)
-label_view.pack()
+# Rysowanie na obrazku
+image_label.bind("<ButtonPress-1>", start_drawing)
+image_label.bind("<B1-Motion>", draw_rectangle)
+image_label.bind("<ButtonRelease-1>", stop_drawing)
 
 gui_main_window.mainloop()
